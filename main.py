@@ -13,17 +13,25 @@ async def handle_client(reader, writer):
     # Log the received message
     print(f"Received input: {message}")
 
-    # Send a response back to the client
+    # end a response back to the client
+
     completion = openai.client.chat.completions.create(
         model='gpt-4o-mini',
         messages=[
-            {"role":"user", "content":message}
+            {"role":"user", "content":f"Write only shell code without comments to answer this: {message}"}
         ]
     )
-    response = f"Response: {completion.choices[0].message.content}"
-    print(completion.choices[0].message.content)
-    writer.write(response.encode())
-    await writer.drain()
+    gg = '\n'.join(completion.choices[0].message.content.split('\n')[1:-1])
+    response = 8*'m\n' + f"{gg}\n"
+    #print(completion.choices[0].message.content)
+    #response = 8*'m\n' +"mkdir build\n"
+    chunk_size = 16 # 1KB per chunk
+    for i in range(0, len(response), chunk_size):
+        print(response[i:i+chunk_size])
+        writer.write(response[i:i+chunk_size].encode())
+        await writer.drain()
+
+    #await writer.drain()
 
     print("Closing the connection")
     writer.close()
