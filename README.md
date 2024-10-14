@@ -2,7 +2,7 @@
 
 **Team**: Tkhir Nazar, Vysotskyi Mykola, Petro Prokopets, Severyn Shykula
 
-## Project description:
+## Project description
 This project aims to create a Secure Terminal Assistant based on a **Large Language Model (LLM)**, either running **locally** or via an **API**. The assistant will be aware of the local computer's system information, enhancing both security and functionality. The model will provide intelligent responses and command execution tailored to the specific machine's environment, helping to manage tasks more securely.
 
 ## Installation
@@ -45,3 +45,8 @@ Enter your questions: How to remove folder in Linux?
 rm -r folder_name
 Do you approve this code (Yes/No)?
 ```
+
+### Screenshots
+
+![sc1](content/sc1.jpg)
+![sc2](content/sc2.jpg)

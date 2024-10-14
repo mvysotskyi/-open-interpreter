@@ -10,3 +10,7 @@ add_executable(client src/main.cpp)
 find_package(Boost 1.71.0 COMPONENTS system REQUIRED)
 target_include_directories(client PRIVATE ${Boost_INCLUDE_DIR})
 target_link_libraries(client Boost::system)
+
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_package(Threads REQUIRED)
+target_link_libraries(client Threads::Threads)
