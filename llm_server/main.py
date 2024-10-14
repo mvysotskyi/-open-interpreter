@@ -1,9 +1,14 @@
 import asyncio
 from openai import OpenAI
+
 import os
+from dotenv import dotenv_values
+
+
 class Server:
     def __init__(self):
-        self.client = OpenAI(api_key="key")
+        self.config = dotenv_values(".env")
+        self.client = OpenAI(api_key=self.config["OPENAI_API_KEY"])
 
 async def handle_client(reader, writer):
     # Read the data sent from the client
