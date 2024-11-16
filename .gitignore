@@ -1,4 +1,9 @@
 .env
+.idea
+.PVS-Studio
+.vscode
+cmake-build-debug
+
 build/
 venv/
 __pycache__/
