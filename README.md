@@ -98,5 +98,4 @@ Shell script executed successfully.
 
 ### Screenshots
 
-![sc1](content/sc1.jpg)
-![sc2](content/sc2.jpg)
+![sc3](content/sc3.png)
