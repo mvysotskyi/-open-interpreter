@@ -20,24 +20,41 @@ class Server:
             'password': password
         }
         self.safety_evaluator = safety_evaluator
-        self.connection = self.connect_to_db()
+        self.db_lock = asyncio.Lock()
         self.delimiter = "~~~END~~~"
 
-    def connect_to_db(self):
-        conn = mysql.connector.connect(**self.db_config)
-        if conn.is_connected():
-            print("Connected to the database!")
-            cursor = conn.cursor()
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS chat_sessions (
-                    chat_id INT AUTO_INCREMENT PRIMARY KEY,
-                    user_id VARCHAR(255) NOT NULL,
-                    chat_history JSON NOT NULL
-                );
-            """)
-            conn.commit()
-            cursor.close()
-        return conn
+    def connect_db_safe(self):
+        return mysql.connector.connect(**self.db_config)
+
+    def query_db_sync(self, connection, query, params=None):
+        cursor = connection.cursor()
+        cursor.execute(query, params or ())
+        result = cursor.fetchall()
+        cursor.close()
+        return result
+
+    def execute_db_sync(self, connection, query, params=None):
+        cursor = connection.cursor()
+        cursor.execute(query, params or ())
+        connection.commit()
+        cursor.close()
+
+    async def query_db(self, query, params=None):
+        async with self.db_lock:
+            connection = self.connect_db_safe()
+            try:
+                result = await asyncio.to_thread(self.query_db_sync, connection, query, params)
+            finally:
+                connection.close()
+        return result
+
+    async def execute_db(self, query, params=None):
+        async with self.db_lock:
+            connection = self.connect_db_safe()
+            try:
+                await asyncio.to_thread(self.execute_db_sync, connection, query, params)
+            finally:
+                connection.close()
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         addr = writer.get_extra_info('peername')
@@ -46,14 +63,23 @@ class Server:
         data = await reader.readline()
         message = data.decode().strip()
         user = ""
+        max_chat_id = 0
         if message.startswith("req:"):
             user = message[4:]
-            cursor = self.connection.cursor()
-            cursor.execute("SELECT chat_id FROM chat_sessions WHERE user_id = %s;", (user,))
-            chat_ids = cursor.fetchall()
-            chat_ids = [str(row[0]) for row in chat_ids]
-            cursor.close()
-            max_chat_id = max(chat_ids) if chat_ids else 0
+            create_table_query = """
+                CREATE TABLE IF NOT EXISTS chat_sessions (
+                    chat_id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id VARCHAR(255) NOT NULL,
+                    chat_history JSON NOT NULL
+                );
+            """
+            await self.execute_db(create_table_query)
+            select_query = "SELECT chat_id FROM chat_sessions WHERE user_id = %s;"
+            params = (user,)
+            result = await self.query_db(select_query, params)
+            chat_ids = [str(row[0]) for row in result]
+            if chat_ids:
+                max_chat_id = max(int(cid) for cid in chat_ids)
             writer.write((",".join(chat_ids) + self.delimiter).encode())
             await writer.drain()
 
@@ -70,13 +96,11 @@ class Server:
                     writer.write(("load:New chat" + self.delimiter).encode())
                     await writer.drain()
                 else:
-                    cursor = self.connection.cursor()
-                    cursor.execute("SELECT chat_history FROM chat_sessions WHERE chat_id = %s AND user_id = %s;", (chat_id, user))
-                    result = cursor.fetchone()
-                    cursor.close()
+                    select_query = "SELECT chat_history FROM chat_sessions WHERE chat_id = %s AND user_id = %s;"
+                    params = (chat_id, user)
+                    result = await self.query_db(select_query, params)
                     if result:
-                        #print(result[0])
-                        chat_history = result[0]
+                        chat_history = result[0][0]
                         formatted_history = '\n'.join([f"{i['role']}: {i['content']}" for i in json.loads(chat_history)[1:]])
                         writer.write(f"load:{formatted_history}{self.delimiter}".encode())
                         self.llm.load_chat_context(json.loads(chat_history))
@@ -84,25 +108,23 @@ class Server:
                         continue
             elif message.lower() == "exit":
                 print("Closing the connection")
-                cursor = self.connection.cursor()
                 chat_context = json.dumps(self.llm.get_chat_context(), default=str)
-                cursor.execute("""
+                insert_query = """
                     INSERT INTO chat_sessions (user_id, chat_history)
                     VALUES (%s, %s)
                     ON DUPLICATE KEY UPDATE chat_history = %s;
-                """, (user, chat_context, chat_context))
-                self.connection.commit()
-                cursor.close()
+                """
+                params = (user, chat_context, chat_context)
+                await self.execute_db(insert_query, params)
                 writer.close()
                 await writer.wait_closed()
                 break
             else:
                 print(f"Received {message} from {addr}")
                 start = time.time()
-                cursor = self.connection.cursor()
-                cursor.execute("SELECT chat_history FROM chat_sessions WHERE user_id = %s AND chat_history LIKE %s;", (user, f"%{message}%"))
-                similar_sessions = cursor.fetchall()
-                cursor.close()
+                search_query = "SELECT chat_history FROM chat_sessions WHERE user_id = %s AND chat_history LIKE %s;"
+                params = (user, f"%{message}%")
+                similar_sessions = await self.query_db(search_query, params)
                 if similar_sessions:
                     session = json.loads(similar_sessions[0][0])
                     llm_response = ""

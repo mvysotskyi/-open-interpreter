@@ -1,7 +1,11 @@
 from abc import ABC, abstractmethod
 import openai
 from openai import OpenAI
+import os
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
+import transformers
+import torch
 
 class LLM(ABC):
     @abstractmethod
@@ -13,22 +17,71 @@ class LLM(ABC):
         ...
 
 
+class QwenLLM(LLM):
+    def __init__(self): 
+        model_id = "Qwen/Qwen2.5-Coder-0.5B-Instruct"
+        self.tokenizer = AutoTokenizer.from_pretrained(model_id)
+        self.model = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            torch_dtype="auto",
+            device_map="auto"
+        )
+        self.chat_context = [
+        {"role": "system", "content": f"You are an AI assistant, that only writes code. You are here {os.getcwd()}. Code only should be either Python or Shell. Return only code as response."},
+        ]
+        
+    def add_system_context(self, message):
+        self.chat_context.append({"role": "system", "content": message})
+    
+    def load_chat_context(self, context):
+        if context == []:
+            self.chat_context = [
+            {"role": "system", "content": f"You are an AI assistant, that only writes code. You are here {os.getcwd()}. Code only should be either Python or Shell. Return only code as response."},
+            ]
+        self.chat_context = context
+
+    def add_context(self, message, role):
+        self.chat_context.append({"role": role, "content": message})
+    
+    def get_response(self, message, add_context=False):        
+        inputs = self.tokenizer.apply_chat_template(
+            self.chat_context + [{"role": "user","content":message}],
+            add_generation_prompt=True,
+            tokenize=False)
+
+        inputs = self.tokenizer([inputs], return_tensors = "pt")
+        inputs.to(self.model.device)
+        generated_ids = self.model.generate(inputs.input_ids, max_new_tokens=1000)
+
+        generated_ids = [
+            output_ids[len(input_ids):] for input_ids, output_ids in zip(inputs.input_ids, generated_ids)
+        ]
+
+        response = self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+        if add_context:
+            self.add_context(message, "user")
+            self.add_context(response.text, "assistant")
+        return response
+
+    def get_completion(self, message):
+        return self.get_response(message, add_context=True)
+
 class OpenAILLM(LLM):
-
-
     def __init__(self, api_key, model="gpt-4o-mini"):
         self.client = OpenAI(api_key=api_key)
         self.model_name = model
         self.chat_context = [
-        {"role": "system", "content": f"You are an AI assistant, that only writes code. Code only should be either Python or Shell. You should not write any other language code."},
+        {"role": "system", "content": f"You are an AI assistant, that only writes code. You are here {os.getcwd()}. Code only should be either Python or Shell. You should not write any other language code."},
         ]
+
     def get_chat_context(self):
         return self.chat_context
-
+    
     def load_chat_context(self, context):
         if context == []:
             self.chat_context = [
-            {"role": "system", "content": f"You are an AI assistant, that only writes code. Code only should be either Python or Shell. You should not write any other language code."},
+            {"role": "system", "content": f"You are an AI assistant, that only writes code. You are here {os.getcwd()}. Code only should be either Python or Shell. You should not write any other language code."},
             ]
         else:
             self.chat_context = context
