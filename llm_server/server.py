@@ -2,10 +2,10 @@ import time
 import asyncio
 import json
 import mysql.connector
-from llms import LLM
+from llms import LLM, ResourcesEvalutor
 
 class Server:
-    def __init__(self, llm: LLM, safety_evaluator):
+    def __init__(self, llm: LLM, safety_evaluator, resource_evaluator: ResourcesEvalutor):
         host = "127.0.0.1"
         port = "3306"
         dbname = "os"
@@ -20,6 +20,7 @@ class Server:
             'password': password
         }
         self.safety_evaluator = safety_evaluator
+        self.resource_evaluator = resource_evaluator
         self.db_lock = asyncio.Lock()
         self.delimiter = "~~~END~~~"
 
@@ -136,7 +137,8 @@ class Server:
                     llm_response = self.llm.get_response(message)
                 print(f"Sending {llm_response} to {addr}")
                 safety = self.safety_evaluator.evaluate(str(message))
-                writer.write(f"{llm_response}\nSafety of code: {safety}{self.delimiter}".encode())
+                resouces = self.resource_evaluator.evaluate(str(message))
+                writer.write(f"{llm_response}\nSafety of code: {safety}\nResources needed: {resouces}{self.delimiter}".encode())
                 end = time.time()
                 print(f"Response time: {end - start:.2f} seconds")
                 await writer.drain()

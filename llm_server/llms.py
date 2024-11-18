@@ -194,3 +194,31 @@ class SafetyEvaluator:
             if option in response.lower():
                 return option
         return response
+
+
+class ResourcesEvalutor:
+    def __init__(self, api_key, model="gpt-4o-mini"):
+        self.client = OpenAI(api_key=api_key)
+        self.model_name = model
+
+        self.chat_context = [
+            {
+                "role": "system", 
+                "content": f"You are a code analyst specialist in software company. You need to evaluate how much given code could use RAM and how long it could take to execute."
+            },
+        ]
+
+    def evaluate(self, message):
+        self.chat_context.append({
+            "role": "user", 
+            "content": "Give answer strictly in format: 'N MB/KB/GB of memory, M seconds'. Write only summary: " + message
+        })
+
+        completion = self.client.chat.completions.create(
+            model=self.model_name,
+            messages=self.chat_context
+        )
+        
+        response  = '\n'.join(completion.choices[0].message.content.split('\n'))
+        print(response, "miwa")
+        return response

@@ -10,6 +10,16 @@
 
 using boost::asio::ip::tcp;
 
+int count_chars(const std::string& str, char c) {
+    int count = 0;
+    for (char ch : str) {
+        if (ch == c) {
+            count++;
+        }
+    }
+    return count;
+}
+
 int main(int argc, char* argv[]) {
     if (argc != 3) {
         std::cerr << "Usage: client <server_ip> <server_port>\n";
@@ -35,8 +45,6 @@ int main(int argc, char* argv[]) {
 
         boost::asio::write(socket, boost::asio::buffer("req:" + (std::string)user + "\n"));
 
-        std::cout << "Choose a chat: (0 to create a new chat)\n";
-
         boost::asio::streambuf response;
 
         // Read and print the initial chat options
@@ -47,13 +55,27 @@ int main(int argc, char* argv[]) {
         std::getline(response_stream, server_message, '\0'); // Read the response until EOF
         response.consume(response.size()); // Clear the streambuf
 
+        std::string possible_chats = server_message.substr(0, server_message.find("~~~END~~~"));
+        std::cout << "Possible chats: " << possible_chats << std::endl;
 
-        std::string chat_select_prefix = "Possible chats: " + server_message.substr(0, server_message.find("~~~END~~~"));
+        int chats_number = possible_chats.empty() ? 0 : count_chars(possible_chats, ',') + 1;
+
         char* buf;
-        buf = readline(chat_select_prefix.c_str());
+        buf = readline("Choose a chat(0 to create a new chat): ");
         
         message = buf;
         free(buf);
+
+        try {
+            int chat_number = std::stoi(message);
+
+            if (chat_number < 0 || chat_number > chats_number) {
+                throw std::exception();
+            }
+        } catch (std::exception& e) {
+            std::cerr << "Invalid chat number." << std::endl;
+            return 1;
+        }
 
         boost::asio::write(socket, boost::asio::buffer("ch:" + message + "\n"));
 
