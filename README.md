@@ -39,7 +39,6 @@ $ python3 llm-server/main.py
 ```
 ```
 Serving on port 5000...
-Received input: How to remove folder in Linux?
 ```
 
 Run client:
