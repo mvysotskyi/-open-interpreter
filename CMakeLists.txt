@@ -14,3 +14,10 @@ target_link_libraries(client Boost::system)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 target_link_libraries(client Threads::Threads)
+
+# Add readline library
+set(CMAKE_VERBOSE_MAKEFILE on)
+include_directories(/usr/include/readline)
+file(GLOB SOURCES "./*.c")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=c99 -Wall")
+target_link_libraries(client readline)
