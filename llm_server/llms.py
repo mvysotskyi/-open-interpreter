@@ -114,12 +114,10 @@ class OpenAILLM(LLM):
             messages=self.chat_context,
             response_format = Output
         )
-        msg = str(completion.choices[0].message.parsed)
-        language = re.search(r"language='(.*?)'", msg).group(1)
-        code = re.search(r"code='(.*?)'", msg).group(1)
-        libraries_match = re.search(r"libraries=\[(.*?)\]", msg)
-        libraries = libraries_match.group(1).split(',') if libraries_match and libraries_match.group(1) else []
-
+        msg = completion.choices[0].message.parsed
+        language = msg.language
+        code = msg.code
+        libraries = msg.libraries
         self.chat_context.append({"role": "assistant", "content": msg})
         #print(1, completion.choices[0].message.parsed)
         message = f"""```{language}\n{code}\n```"""
