@@ -3,12 +3,88 @@
 #include <string>
 #include <sstream>
 #include <fstream>
-
 #include <readline/readline.h>
 #include <readline/history.h>
-
-
+#include <sys/types.h>
+#include <unistd.h>
+#include <cstdlib>
+#include <sys/wait.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <cstring>
 using boost::asio::ip::tcp;
+
+
+bool is_cgroup_v2() {
+    std::ifstream mounts("/proc/mounts");
+    std::string line;
+    while (std::getline(mounts, line)) {
+        if (line.find("cgroup2") != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void execute_as_root(const std::string& command) {
+    std::string sudo_command = "sudo " + command;
+    int ret = system(sudo_command.c_str());
+    if (ret != 0) {
+        std::cerr << "Command failed: " << sudo_command << std::endl;
+        exit(EXIT_FAILURE);
+    }
+}
+
+void set_memory_limit(const std::string& group_name, int memory_limit_mb, pid_t pid) {
+    bool cgroup_v2 = is_cgroup_v2();
+    std::ostringstream cgroup_path;
+
+    if (cgroup_v2) {
+        cgroup_path << "/sys/fs/cgroup/" << group_name;
+    } else {
+        cgroup_path << "/sys/fs/cgroup/memory/" << group_name;
+    }
+
+    // Create the cgroup
+    std::ostringstream mkdir_cmd;
+    mkdir_cmd << "mkdir -p " << cgroup_path.str();
+    execute_as_root(mkdir_cmd.str());
+
+    // Join cgroup
+    std::ostringstream join_cmd;
+    join_cmd << "echo " << pid << " | sudo tee " << cgroup_path.str() << (cgroup_v2 ? "/cgroup.procs" : "/tasks") << " > /dev/null";
+    execute_as_root(join_cmd.str());
+
+    // Set memory limit
+    std::ostringstream mem_cmd;
+    mem_cmd << "echo " << (memory_limit_mb * 1024 * 1024) << " | sudo tee " 
+            << cgroup_path.str() << (cgroup_v2 ? "/memory.max" : "/memory.limit_in_bytes") << " > /dev/null";
+    execute_as_root(mem_cmd.str());
+}
+int safe_exec(const char* command, int memory_limit_mb, int cpu_core) {
+
+    pid_t pid = fork();
+
+    if (pid == 0) {
+        execlp("/bin/sh", "sh", "-c", command, nullptr);
+        perror("execlp");
+        exit(EXIT_FAILURE);
+    } else if (pid > 0) {
+        std::string group_name = "cpp_group";
+
+
+        //set_cpu_affinity(pid, cpu_core);
+
+        set_memory_limit(group_name, memory_limit_mb, pid);
+        waitpid(pid, nullptr, 0);
+    } else {
+        perror("fork");
+        exit(EXIT_FAILURE);
+    }
+
+    return 0;
+}
 
 int count_chars(const std::string& str, char c) {
     int count = 0;
@@ -134,7 +210,7 @@ int main(int argc, char* argv[]) {
                                     python_file.close();
                                     std::cout << "Executing Python script:\n" << script << std::endl;
 
-                                    int return_code = system("python3 temp_script.py");
+                                    int return_code = safe_exec("python3 temp_script.py", 1, 1);
 
                                     if (return_code == 0) {
                                         std::cout << "Python script executed successfully." << std::endl;
@@ -151,7 +227,7 @@ int main(int argc, char* argv[]) {
                                 // Execute shell commands
                                 std::string command = script;
                                 std::cout << "Executing shell script:\n" << command << std::endl;
-                                int return_code = system(command.c_str());
+                                int return_code = safe_exec(command.c_str(), 1,1);
 
                                 if (return_code == 0) {
                                     std::cout << "Shell script executed successfully." << std::endl;
