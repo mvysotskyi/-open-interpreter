@@ -112,15 +112,14 @@ class OpenAILLM(LLM):
         completion = self.client.beta.chat.completions.parse(
             model=self.model_name,
             messages=self.chat_context,
-            response_format = Output
+            response_format=Output
         )
         msg = completion.choices[0].message.parsed
         language = msg.language
         code = msg.code
         libraries = msg.libraries
-        self.chat_context.append({"role": "assistant", "content": msg})
-        #print(1, completion.choices[0].message.parsed)
         message = f"""```{language}\n{code}\n```"""
+        self.chat_context.append({"role": "assistant", "content": message})  # Use 'message' instead of 'msg'
         return message
     
     def get_completion(self, message):

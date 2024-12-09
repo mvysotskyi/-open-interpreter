@@ -109,17 +109,30 @@ class Server:
                         continue
             elif message.lower() == "exit":
                 print("Closing the connection")
-                chat_context = json.dumps(self.llm.get_chat_context(), default=str)
-                insert_query = """
-                    INSERT INTO chat_sessions (user_id, chat_history)
-                    VALUES (%s, %s)
-                    ON DUPLICATE KEY UPDATE chat_history = %s;
-                """
-                params = (user, chat_context, chat_context)
-                await self.execute_db(insert_query, params)
-                writer.close()
-                await writer.wait_closed()
-                break
+                if chat_id == max_chat_id:
+                    chat_context = json.dumps(self.llm.get_chat_context(), default=str)
+                    insert_query = """
+                        INSERT INTO chat_sessions (user_id, chat_history)
+                        VALUES (%s, %s)
+                        ON DUPLICATE KEY UPDATE chat_history = %s;
+                    """
+                    params = (user, chat_context, chat_context)
+                    await self.execute_db(insert_query, params)
+                    writer.close()
+                    await writer.wait_closed()
+                    break
+                else:
+                    chat_context = json.dumps(self.llm.get_chat_context(), default=str)
+                    upd_query = """
+                    UPDATE chat_sessions
+                    SET chat_history = %s
+                    WHERE chat_id = %s AND user_id = %s;
+                    """
+                    params = (chat_context, chat_id, user)
+                    await self.execute_db(upd_query, params)
+                    writer.close()
+                    await writer.wait_closed()
+                    break
             else:
                 print(f"Received {message} from {addr}")
                 start = time.time()
