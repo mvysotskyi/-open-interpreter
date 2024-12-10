@@ -118,7 +118,7 @@ class OpenAILLM(LLM):
         language = msg.language
         code = msg.code
         libraries = msg.libraries
-        message = f"""```{language}\n{code}\n```"""
+        message = f"""```{language.lower()}\n{code}\n```"""
         self.chat_context.append({"role": "assistant", "content": message})  # Use 'message' instead of 'msg'
         return message
     
