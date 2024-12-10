@@ -133,6 +133,11 @@ class Server:
                     writer.close()
                     await writer.wait_closed()
                     break
+            elif message.lower() == "aexit":
+                print("Closing the connection")
+                writer.close()
+                await writer.wait_closed()
+                break
             else:
                 print(f"Received {message} from {addr}")
                 start = time.time()
